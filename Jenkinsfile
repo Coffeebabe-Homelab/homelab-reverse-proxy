@@ -14,6 +14,7 @@ pipeline {
         DEPLOY_HOST = 'staging-deploy'
         DEPLOY_USER = 'deploy'
         DEPLOY_PATH = '~/staging/home-lab-reverse-proxy'
+        REPOSITORY = 'git@github.com:Coffeebabe-Homelab/homelab-reverse-proxy.git'
     }
 
     stages {
@@ -27,6 +28,24 @@ pipeline {
             }
         }
 
+        stage('Checkout staging') {
+            steps {
+                git branch: 'staging',
+                    url: env.REPOSITORY,
+                    credentialsId: 'git-checkout-key'
+        
+                sh '''
+                    git config --global pull.rebase false
+                    git config --global user.email "jenkins@mecha-rat"
+                    git config --global user.name "Jenkins"
+                    git fetch origin --prune
+                    git fetch origin staging --prune
+                    git checkout -B staging origin/staging
+                    git branch --list
+                '''
+            }
+        }
+
         stage('Deploy') {
             steps {
                 sshagent(credentials: ['staging-ssh-key']) {
@@ -34,8 +53,10 @@ pipeline {
                         set -eu
                         : "${DEPLOY_HOST:?Set DEPLOY_HOST as a Jenkins job or folder environment variable}"
                         : "${DEPLOY_USER:?Set DEPLOY_USER as a Jenkins job or folder environment variable}"
-                        ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+                        ssh "$DEPLOY_USER@$DEPLOY_HOST" \
                           "mkdir -p '$DEPLOY_PATH/nginx/conf.d'"
+                    '''
+                    sh '''
                         scp docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker-compose.yml"
                         scp nginx/conf.d/homelab.conf "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/nginx/conf.d/homelab.conf"
                         ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
