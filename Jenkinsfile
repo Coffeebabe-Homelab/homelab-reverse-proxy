@@ -27,7 +27,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sshagent(credentials: ['homelab-ssh-key']) {
+                sshagent(credentials: ['staging-ssh-key']) {
                     sh '''#!/bin/sh
                         set -eu
                         : "${DEPLOY_HOST:?Set DEPLOY_HOST as a Jenkins job or folder environment variable}"
