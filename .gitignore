@@ -1,0 +1,27 @@
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Secrets and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*~
+*.swp
+
+# Logs and generated data
+*.log
+*.img
+*.img.gz
+*.backup
+backups/
