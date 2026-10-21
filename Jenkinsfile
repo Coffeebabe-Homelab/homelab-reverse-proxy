@@ -11,6 +11,8 @@ pipeline {
     }
 
     environment {
+        DEPLOY_HOST = 'staging-deploy'
+        DEPLOY_USER = 'deploy'
         DEPLOY_PATH = '/opt/home-lab-reverse-proxy'
     }
 
