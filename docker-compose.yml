@@ -6,7 +6,7 @@ services:
     ports:
       # Bind to the server's private network interfaces, never a public
       # interface. Restrict access to LAN and Tailscale clients in the firewall.
-      - "${PROXY_BIND_ADDRESS:-0.0.0.0}:443:8000"
+      - "${PROXY_BIND_ADDRESS:-0.0.0.0}:${PROXY_PORT:-8000}:8000"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     extra_hosts:
