@@ -13,7 +13,7 @@ pipeline {
     environment {
         DEPLOY_HOST = 'staging-deploy'
         DEPLOY_USER = 'deploy'
-        DEPLOY_PATH = '~/staging/home-lab-reverse-proxy'
+        DEPLOY_PATH = '~/staging/reverse-proxy'
         REPOSITORY = 'git@github.com:Coffeebabe-Homelab/homelab-reverse-proxy.git'
     }
 
@@ -53,14 +53,14 @@ pipeline {
                         set -eu
                         : "${DEPLOY_HOST:?Set DEPLOY_HOST as a Jenkins job or folder environment variable}"
                         : "${DEPLOY_USER:?Set DEPLOY_USER as a Jenkins job or folder environment variable}"
-                        ssh "$DEPLOY_USER@$DEPLOY_HOST" \
-                          "mkdir -p '$DEPLOY_PATH/nginx/conf.d'"
+                        ssh ${DEPLOY_HOST} "mkdir -p ${DEPLOY_PATH}/nginx/conf.d"
                     '''
                     sh '''
                         scp docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker-compose.yml"
-                        scp nginx/conf.d/homelab.conf "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/nginx/conf.d/homelab.conf"
-                        ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-                          "cd '$DEPLOY_PATH' && docker compose config -q && docker compose up -d --pull always && docker compose exec -T nginx nginx -t"
+                        scp nginx/conf.d/homelab.conf "${DEPLOY_HOST}:${DEPLOY_PATH}/nginx/conf.d/homelab.conf"
+                        ssh ${DEPLOY_HOST} "cd ${DEPLOY_PATH} \
+                            && docker compose config -q \
+                            && docker compose up -d --pull always && docker compose exec -T nginx nginx -t"
                     '''
                 }
             }
