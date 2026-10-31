@@ -1,49 +1,50 @@
-# HTTPS Plan: Private Staging
+# HTTPS: Private Staging
 
-**Status:** Custom DNS is configured and resolving; custom-domain TLS method remains to be selected
-**Last updated:** 2026-10-22
+**Status:** Tailscale Services working; confirmed by the operator
+**Last updated:** 2026-10-28
 
-## Goal
+Private staging uses one Tailscale Service per application on `mecha-rat`, with stable names and automatically provisioned HTTPS certificates. See [README.md](README.md) for URLs and local upstreams, and [TAILSCALE.md](TAILSCALE.md) for host configuration and access policy. [Production remains out of scope](https-production.md).
 
-Route private home-lab services by custom hostname. LAN DNS resolves those hostnames to the proxy host, Tailscale MagicDNS resolves tailnet device names while Pi-hole serves DNS to tailnet clients, and Tailscale Serve keeps the existing HTTPS listener on 443 and forwards to NGINX on port 8000. Production is tracked separately and remains out of scope.
+The following settings and checks are the operating reference for future changes. The working status reflects operator confirmation, rather than automated checks from this repository.
 
-## Current context
+## Application settings
 
-- The home-lab host is `mecha-rat` in tailnet `tail028aa9.ts.net`.
-- Tailscale owns host port 443. Its current Serve configuration is `https://mecha-rat.tail028aa9.ts.net/` forwarding to `localhost:80`.
-- Nextcloud listens on host port 80. It does not own 443.
-- Coding Tycoon Compose publishes its frontend on loopback port 5173. Its own NGINX serves the frontend and proxies `/api/` while preserving the backend `/api` prefix.
-- Auth0 `VITE_*` settings are embedded in the frontend image. The app must be reached over HTTPS for browser authentication.
+### Nextcloud
 
-## Private routing design
+Add `nextcloud.tail028aa9.ts.net` to trusted domains. Review trusted proxies against the actual source Nextcloud sees from Serve; trust only the required proxy addresses. Set HTTPS detection and canonical/CLI URL settings as required so redirects and generated links use `https://nextcloud.tail028aa9.ts.net`.
 
-Pi-hole runs on the Raspberry Pi Zero at reserved LAN address `192.168.1.254`. The router advertises that address as DNS to LAN DHCP clients. Tailscale is installed on the Pi-hole host; its Tailscale IPv4 address is configured as the tailnet global nameserver and Override local DNS is enabled. MagicDNS remains enabled for tailnet device names. Pi-hole forwards public DNS queries to its selected upstream provider.
+Verify required upload sizes through Serve and review Nextcloud and its own web-server limits.
 
-The following private A records are configured in Pi-hole and confirmed resolving correctly. They point to the reverse-proxy host's LAN IP (not Pi-hole's address). NGINX selects the upstream using the request Host header.
+### Jenkins
 
-| Name | Private DNS address | NGINX upstream |
-| --- | --- | --- |
-| `nextcloud.homelab.rat` | `mecha-rat` LAN IP | Host port 80 |
-| `coding-tycoon-stg.homelab.rat` | `mecha-rat` LAN IP | Loopback port 5173 |
+Set Jenkins' external URL to `https://jenkins.tail028aa9.ts.net/jenkins`. Confirm Jenkins itself runs under the `/jenkins` context path; the Service proxy does not add that prefix. Review webhook, agent, and integration URLs and any separate connectivity they require. The Service exposes the HTTP application over 443, not a separate Jenkins agent TCP listener.
 
-Detailed Pi-hole, router DNS, MagicDNS, and Tailscale DNS steps are in [TAILSCALE.md](TAILSCALE.md). Do not enable Pi-hole's **Permit all origins** without a firewall rule that limits DNS traffic to trusted LAN and Tailscale clients; never expose DNS to the public Internet.
+### Coding Tycoon staging
 
-## Tailscale Serve and TLS behavior
+Keep the frontend on loopback port `5173` and retain its application server. Verify that `/tycoon` is a supported frontend base path and that API calls reach `/api/` on the same Service origin.
 
-The shared NGINX proxy listens on port 8000. Change Tailscale Serve to forward from its existing HTTPS listener on 443 to `localhost:8000`; this does not displace Nextcloud on port 80. NGINX routes requests whose Host header is one of the configured service names. A server block also accepts `mecha-rat.tail028aa9.ts.net` for Nextcloud through the existing Serve URL.
+Update Auth0 Allowed Callback URLs and Allowed Logout URLs with the actual application paths under `https://coding-tycoon-stg.tail028aa9.ts.net`. Set Allowed Web Origins to that HTTPS origin without a path. Review related origin/CORS settings and update embedded `VITE_*` configuration, then rebuild and redeploy the frontend image. Remove obsolete allowed URLs after all clients have moved.
 
-Tailscale Serve terminates TLS with a certificate for the node's `*.ts.net` hostname. It does **not** provide a certificate for `coding-tycoon-stg.homelab.rat`. Therefore private DNS and NGINX host routing alone make the custom domain resolve and route, but do not make `https://coding-tycoon-stg.homelab.rat` certificate-valid through Serve. For Auth0 at a custom HTTPS origin, terminate TLS with a matching certificate at a separate ingress endpoint (for example NGINX on 443, using a private CA or DNS-01 certificate), which means Tailscale cannot also own that same 443 socket. Alternatively, retain Tailscale Serve on 443 and use its `*.ts.net` hostname for the HTTPS Auth0 URL while using custom DNS hostnames for LAN-only HTTP services.
+## Acceptance checks
 
-If custom-domain TLS should also be served to tailnet clients, expose the separate TLS ingress over Tailscale and make its address reachable to those clients. Tailscale DNS can return an address reachable through a subnet router or a Tailscale-enabled resolver/host. Port 8000 must be firewalled to intended private sources and must not be forwarded from the Internet.
+From an allowed client connected to Tailscale, verify MagicDNS resolution and valid HTTPS without bypassing certificate verification:
 
-## Staging steps
+```sh
+curl -I https://nextcloud.tail028aa9.ts.net/
+curl -I https://jenkins.tail028aa9.ts.net/jenkins/
+curl -I https://coding-tycoon-stg.tail028aa9.ts.net/tycoon
+```
 
-1. Confirm the reserved LAN IP for `mecha-rat` and choose the private DNS zone. Pi-hole's reserved LAN address is `192.168.1.254`.
-2. **Completed:** Pi-hole Local DNS has A records for `nextcloud.homelab.rat` and `coding-tycoon-stg.homelab.rat`, and both resolve to `mecha-rat`'s LAN IP. The router's LAN/DHCP DNS is set to `192.168.1.254`. Keep these records private; do not publish them publicly.
-3. Tailscale DNS is configured: MagicDNS is enabled, Pi-hole's Tailscale IPv4 address is the global nameserver, and Override local DNS is enabled. Ensure tailnet clients accept Tailscale DNS settings and Pi-hole accepts DNS from tailnet clients without exposing port 53 publicly.
-4. Use `nextcloud.homelab.rat` and `coding-tycoon-stg.homelab.rat` in `nginx/conf.d/homelab.conf`. Keep the `mecha-rat.tail028aa9.ts.net` alias if the existing Serve URL should continue routing to Nextcloud.
-5. Deploy NGINX on port 8000 and allow it through the host firewall only from the LAN and intended tailnet sources. Keep frontend port 5173 bound to loopback.
-6. Verify routing with `curl -H 'Host: <service-hostname>' http://127.0.0.1:8000/` from the server.
-7. Run `sudo tailscale serve 8000` after checking the installed CLI help, then verify `sudo tailscale serve status`. This leaves tailscaled owning HTTPS port 443 and changes its local target from port 80 to port 8000.
-8. Choose how to provide trusted HTTPS for the custom app hostname. Configure the matching endpoint and update Auth0 callback, logout, and web origin. Rebuild the frontend after changing any `VITE_*` value.
-9. Verify DNS on LAN and tailnet clients, intended HTTPS/TLS trust, Auth0 login/callback/logout, API access, Nextcloud, and that upstream ports are not exposed directly.
+Inspect redirect targets as well as status codes. Application login redirects can be expected; old hostnames, HTTP redirects, certificate errors, and proxy failures need investigation.
+
+- Nextcloud: browser login, WebDAV/sync, upload and download including the required large-file size, and generated share links.
+- Jenkins: login, assets, redirects, job execution, and required agents/integrations.
+- Coding Tycoon: direct page load, refresh under `/tycoon`, assets, Auth0 login/callback/logout, API requests, and any WebSocket connections.
+- Networking: repeat on home Wi-Fi and remotely with Tailscale connected; confirm a restricted identity cannot access the Services. Check that direct application ports do not bypass intended restrictions.
+- Service health: check `sudo tailscale serve status --json` and the admin console for active Service hosts.
+
+## Recovery
+
+Keep private snapshots of Serve configuration, access policy, application external URLs, and Auth0 settings before changes. Restore the affected settings or upstream application if a change fails; rebuild the frontend when reverting embedded `VITE_*` values.
+
+Inspect `sudo tailscale serve status --json` and the Service host's approval state. Restore individual endpoint mappings using the commands in [TAILSCALE.md](TAILSCALE.md). Resume drained Services with `tailscale serve advertise svc:<name>` after verifying their configuration. Avoid a global Serve reset.

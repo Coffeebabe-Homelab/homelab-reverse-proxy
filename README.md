@@ -1,45 +1,23 @@
-# Home Lab Reverse Proxy
+# Home Lab Service Access
 
-NGINX reverse proxy configuration for private home lab services. NGINX routes requests by hostname and forwards them to services running on the `mecha-rat` host.
+Private applications on `mecha-rat` are exposed through Tailscale Services. The setup is confirmed working; this repository documents its configuration and operation.
 
-## Current services
+## Services
 
-| Hostname | Upstream |
-| --- | --- |
-| `nextcloud.homelab.rat` | Host port `80` |
-| `coding-tycoon-stg.homelab.rat` | Host port `5173` |
+| Application | HTTPS URL | Local upstream |
+| --- | --- | --- |
+| Nextcloud | `https://nextcloud.tail028aa9.ts.net/` | `http://127.0.0.1:80` |
+| Jenkins | `https://jenkins.tail028aa9.ts.net/jenkins` | `http://127.0.0.1:8080` |
+| Coding Tycoon staging | `https://coding-tycoon-stg.tail028aa9.ts.net/tycoon` | `http://127.0.0.1:5173` |
 
-Pi-hole provides local DNS for these names. It is hosted on a Raspberry Pi Zero at reserved LAN address `192.168.1.254`. DNS A records point to the reverse proxy host's LAN address. Tailscale is used for private remote access; MagicDNS resolves tailnet device names, and Pi-hole is configured as the tailnet DNS resolver.
+Tailscale Services provide stable application names, private routing, and automatically provisioned HTTPS certificates. Clients must connect to the tailnet and have access to the relevant Service, including while on home Wi-Fi.
 
-## Start the proxy
+## Configuration and operation
 
-On the proxy host, from this directory:
+Follow [TAILSCALE.md](TAILSCALE.md) for prerequisites, Service definitions, local upstream commands, approval, access policy, and lifecycle operations. The admin console defines each Service's name and advertised port; configure its local upstream using the CLI on `mecha-rat`.
 
-```sh
-docker compose up -d
-docker compose exec -T nginx nginx -t
-```
+See [https-staging.md](https-staging.md) for application settings and verification. [Production remains separate](https-production.md).
 
-The Compose file publishes NGINX on host port `8000` by default. It proxies Nextcloud to host port `80` and the staging app to host port `5173`. Make sure the upstream services are running and the host firewall limits port `8000` to intended private clients. Do not forward it from the public Internet.
+MagicDNS supplies application names. Pi-hole can continue providing DNS filtering and other local records. This repository contains documentation only; Service configuration lives on the host and in the Tailscale admin console.
 
-Override the bind address or port by creating a local `.env` file with `PROXY_BIND_ADDRESS` and/or `PROXY_PORT`; `.env` is ignored by Git.
-
-## DNS and Tailscale
-
-The router advertises Pi-hole (`192.168.1.254`) as DNS to LAN clients. Pi-hole's local DNS records resolve the service names above to the proxy host. Tailnet clients reach Pi-hole using its Tailscale IP; MagicDNS can remain enabled for device names.
-
-See [TAILSCALE.md](TAILSCALE.md) for DNS and Tailscale Serve setup, and [https-staging.md](https-staging.md) for the current private staging and HTTPS plan. Production is explicitly out of scope; see [https-production.md](https-production.md).
-
-## Repository contents
-
-- `docker-compose.yml` — NGINX container and port mapping.
-- `nginx/conf.d/homelab.conf` — hostname routing and reverse proxy rules.
-- `TAILSCALE.md` — Pi-hole DNS, Tailscale DNS, and Tailscale Serve notes.
-- `https-staging.md` — private staging plan and remaining HTTPS work.
-- `https-production.md` — deferred production plan.
-
-## Safety notes
-
-- Keep credentials, private keys, `.env` files, and generated backups out of Git.
-- Pi-hole DNS and the reverse proxy are for private LAN/tailnet access only.
-- Do not expose DNS port `53`, NGINX port `8000`, or upstream application ports publicly.
+Keep credentials, keys, and local configuration backups out of Git. Keep application ports private.
